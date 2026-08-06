@@ -1,6 +1,6 @@
 # Smart File Organizer
 
-A simple Python utility that automatically organizes files inside the Downloads folder.
+A simple Python utility that automatically organizes files inside the Downloads folder and gives the choice to user to select the location [still in progress for advanced version].
 
 ## Features
 
