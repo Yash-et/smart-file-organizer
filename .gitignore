@@ -1,6 +1,18 @@
 __pycache__/
 *.pyc
+<<<<<<< HEAD
 
 sample_files/
 logs/
 report.txt
+=======
+.venv/
+venv/
+.env
+
+logs/*
+!logs/.gitkeep
+
+reports/*
+!reports/.gitkeep
+>>>>>>> d6961ad (Release Smart File Organizer v2.0)
