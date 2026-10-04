@@ -4,7 +4,7 @@ A simple Python utility that automatically organizes files inside the Downloads 
 
 [In progress for version 2.0]
 [For now, it doesn't have GUI]
-[Updates in progress, hold your seatbelts due to delay & testing]
+[Updates in progress, hold your seatbelts due to delay & testing and maybe delayed]
 
 ## Features
 
