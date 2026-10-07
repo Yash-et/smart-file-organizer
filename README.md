@@ -7,7 +7,7 @@ A simple Python utility that automatically organizes files inside the Downloads 
 
 [Updates in progress, hold your seatbelts due to delay & testing and maybe delayed]
 
-[Though it's simple n time consuming, it will be worth it]
+[Though it's simple n time consuming, it will be worth it...planned to be updated soon.]
 
 ## Features
 
