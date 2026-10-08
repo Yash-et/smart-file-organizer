@@ -75,6 +75,8 @@ The project includes an automated pytest test suite covering:
 ---
 
 ## 📁 Project Structure
+
+```text
 smart-file-organizer/
 │
 ├── organizer.py          # Main application
@@ -90,6 +92,7 @@ smart-file-organizer/
 │
 └── reports/
     └── .gitkeep
+```
 ---
 
 ## 🚀 Installation
