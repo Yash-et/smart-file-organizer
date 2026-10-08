@@ -5,71 +5,7 @@ import logging
 import shutil
 import time
 
-<<<<<<< HEAD
-# ==========================================
-# Smart File Organizer v1.1
-# ==========================================
-
-FILE_TYPES = {
-    "Images": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg"],
-    "Documents": [".pdf", ".doc", ".docx", ".txt", ".ppt", ".pptx", ".xls", ".xlsx", ".csv"],
-    "Videos": [".mp4", ".mkv", ".avi", ".mov", ".wmv"],
-    "Music": [".mp3", ".wav", ".aac", ".flac"],
-    "Archives": [".zip", ".rar", ".7z", ".tar", ".gz"],
-    "Programs": [".exe", ".msi"],
-}
-
-IGNORED_FILES = {
-    "thumbs.db",
-    "desktop.ini"
-}
-
-
-def get_folder():
-    folder = input(
-        "Enter folder path (Press Enter for Downloads): "
-    ).strip()
-
-    if folder:
-        path = Path(folder)
-
-    else:
-        path = Path.home() / "Downloads"
-
-    if not path.exists():
-        print("\nFolder does not exist.")
-        raise SystemExit
-
-    return path
-
-
-def get_destination(extension):
-
-    for folder, extensions in FILE_TYPES.items():
-
-        if extension in extensions:
-            return folder
-
-    return "Others"
-
-
-def unique_name(destination, file):
-
-    new_path = destination / file.name
-
-    counter = 1
-
-    while new_path.exists():
-
-        new_path = destination / f"{file.stem}_{counter}{file.suffix}"
-
-        counter += 1
-
-    return new_path
-=======
 from colorama import Fore, Style, init
-
-
 # ==========================================
 # Smart File Organizer v2.0
 # ==========================================
@@ -138,6 +74,61 @@ DEFAULT_CONFIG = {
     }
 }
 
+def validate_config(config):
+    """Validate configuration structure and values."""
+
+    if not isinstance(config, dict):
+        raise ValueError("Config must be a JSON object.")
+
+    categories = config.get("categories")
+    settings = config.get("settings")
+
+    if not isinstance(categories, dict) or not categories:
+        raise ValueError("Categories must be a non-empty object.")
+
+    if not isinstance(settings, dict):
+        raise ValueError("Settings must be an object.")
+
+    for category, extensions in categories.items():
+        if not isinstance(category, str) or not category.strip():
+            raise ValueError("Category names must be non-empty strings.")
+
+        if category in {".", ".."} or "/" in category or "\\" in category:
+            raise ValueError(f"Invalid category name: {category}")
+
+        if not isinstance(extensions, list):
+            raise ValueError(
+                f"Extensions for {category} must be a list."
+            )
+
+        for ext in extensions:
+            if (
+                not isinstance(ext, str)
+                or not ext.startswith(".")
+                or len(ext) < 2
+                or "/" in ext
+                or "\\" in ext
+            ):
+                raise ValueError(
+                    f"Invalid extension in {category}: {ext}"
+                )
+
+    others = settings.get("others_folder", "Others")
+
+    if (
+        not isinstance(others, str)
+        or not others.strip()
+        or others in {".", ".."}
+        or "/" in others
+        or "\\" in others
+    ):
+        raise ValueError("Invalid others_folder setting.")
+
+    for key in ("skip_hidden_files", "skip_system_files"):
+        if key in settings and not isinstance(settings[key], bool):
+            raise ValueError(f"{key} must be true or false.")
+
+    return config
 
 SYSTEM_FILES = {
     "thumbs.db",
@@ -182,8 +173,13 @@ def load_config():
         with open(CONFIG_FILE, "r", encoding="utf-8") as file:
             config = json.load(file)
 
-        return config
-
+        return validate_config(config)
+    except (ValueError, TypeError) as error:
+        print(Fore.RED + f"Invalid configuration: {error}")
+        logging.error(f"Invalid configuration: {error}")
+        print(Fore.YELLOW + "Using default configuration.")
+        return DEFAULT_CONFIG
+    
     except json.JSONDecodeError:
 
         print(
@@ -263,24 +259,61 @@ def get_target_folder(folder_argument):
 
     return folder
 
+#OLD LOGIC FOR GETTING FILES (COMMENTED OUT)
+# def get_files(folder, recursive=False):
+#     """Return files to organize."""
 
+#     if recursive:
+
+#         return [
+#             item
+#             for item in folder.rglob("*")
+#             if item.is_file()
+#         ]
+
+#     return [
+#         item
+#         for item in folder.iterdir()
+#         if item.is_file()
+#     ]
+
+# NEW LOGIC FOR GETTING FILES
 def get_files(folder, recursive=False):
-    """Return files to organize."""
+    """Return files to organize without scanning output folders."""
 
-    if recursive:
-
+    if not recursive:
         return [
-            item
-            for item in folder.rglob("*")
+            item for item in folder.iterdir()
             if item.is_file()
         ]
 
-    return [
-        item
-        for item in folder.iterdir()
-        if item.is_file()
-    ]
+    excluded_dirs = {
+        "Images",
+        "Documents",
+        "Videos",
+        "Music",
+        "Archives",
+        "Programs",
+        "Others",
+        "logs",
+        "reports",
+    }
 
+    files = []
+
+    for item in folder.rglob("*"):
+        if not item.is_file():
+            continue
+
+        relative_parts = item.relative_to(folder).parts
+
+        # Skip files inside existing output/system folders.
+        if any(part in excluded_dirs for part in relative_parts[:-1]):
+            continue
+
+        files.append(item)
+
+    return files
 
 def is_ignored(file, config):
     """Determine whether a file should be ignored."""
@@ -344,74 +377,110 @@ def get_unique_destination(destination, file):
 
     return target
 
+# OLD LOGIC FOR ORGANIZING FILES (COMMENTED OUT)
+# def organize_file(file, category, root_folder, dry_run=False):
+#     """Move a file into its category."""
 
+#     destination = root_folder / category
+
+#     destination.mkdir(
+#         exist_ok=True
+#     )
+
+#     target = get_unique_destination(
+#         destination,
+#         file
+#     )
+
+#     if dry_run:
+
+#         print(
+#             Fore.CYAN
+#             + f"[DRY RUN] {file.name}"
+#         )
+
+#         print(
+#             f"          → {category}"
+#         )
+
+#         return True, target
+
+#     try:
+
+#         shutil.move(
+#             str(file),
+#             str(target)
+#         )
+
+#         print(
+#             Fore.GREEN
+#             + f"✓ {file.name}"
+#         )
+
+#         print(
+#             f"  → {category}"
+#         )
+
+#         logging.info(
+#             f"Moved: {file} -> {target}"
+#         )
+
+#         return True, target
+
+#     except Exception as error:
+
+#         print(
+#             Fore.RED
+#             + f"✗ Failed: {file.name}"
+#         )
+
+#         print(
+#             f"  Reason: {error}"
+#         )
+
+#         logging.error(
+#             f"Failed to move {file}: {error}"
+#         )
+
+#         return False, target 
+
+# NEW LOGIC FOR ORGANIZING FILES
 def organize_file(file, category, root_folder, dry_run=False):
-    """Move a file into its category."""
+    """Move a file into its category, or preview the move."""
 
     destination = root_folder / category
 
-    destination.mkdir(
-        exist_ok=True
-    )
-
-    target = get_unique_destination(
-        destination,
-        file
-    )
-
     if dry_run:
+        # Don't create directories or move files.
+        target = get_unique_destination(destination, file)
 
-        print(
-            Fore.CYAN
-            + f"[DRY RUN] {file.name}"
-        )
-
-        print(
-            f"          → {category}"
-        )
+        print(Fore.CYAN + f"[DRY RUN] {file.name}")
+        print(f"          → {category}")
 
         return True, target
 
     try:
+        destination.mkdir(exist_ok=True)
 
-        shutil.move(
-            str(file),
-            str(target)
-        )
+        target = get_unique_destination(destination, file)
 
-        print(
-            Fore.GREEN
-            + f"✓ {file.name}"
-        )
+        shutil.move(str(file), str(target))
 
-        print(
-            f"  → {category}"
-        )
+        print(Fore.GREEN + f"✓ {file.name}")
+        print(f"  → {category}")
 
-        logging.info(
-            f"Moved: {file} -> {target}"
-        )
+        logging.info(f"Moved: {file} -> {target}")
 
         return True, target
 
     except Exception as error:
+        print(Fore.RED + f"✗ Failed: {file.name}")
+        print(f"  Reason: {error}")
 
-        print(
-            Fore.RED
-            + f"✗ Failed: {file.name}"
-        )
+        logging.error(f"Failed to move {file}: {error}")
 
-        print(
-            f"  Reason: {error}"
-        )
-
-        logging.error(
-            f"Failed to move {file}: {error}"
-        )
-
-        return False, target
-
-
+        return False, target if "target" in locals() else None
+    
 def generate_report(
     root_folder,
     stats,
@@ -493,21 +562,11 @@ def generate_report(
         )
 
     return report_file
->>>>>>> d6961ad (Release Smart File Organizer v2.0)
+
 
 
 def main():
-
-<<<<<<< HEAD
-    folder = get_folder()
-
-    start = time.time()
-
-    total = 0
-
-    skipped = 0
-
-=======
+    
     setup_logging()
 
     args = parse_arguments()
@@ -560,73 +619,11 @@ def main():
 
     total = 0
     skipped = 0
->>>>>>> d6961ad (Release Smart File Organizer v2.0)
+
     failed = 0
 
     stats = {}
 
-<<<<<<< HEAD
-    print("\n" + "=" * 60)
-    print(" SMART FILE ORGANIZER v1.1 ")
-    print("=" * 60)
-
-    for item in folder.iterdir():
-
-        if item.is_dir():
-            continue
-
-        if item.name.startswith("."):
-            skipped += 1
-            continue
-
-        if item.name.lower() in IGNORED_FILES:
-            skipped += 1
-            continue
-
-        category = get_destination(item.suffix.lower())
-
-        destination = folder / category
-
-        destination.mkdir(exist_ok=True)
-
-        destination_file = unique_name(destination, item)
-
-        try:
-
-            shutil.move(str(item), str(destination_file))
-
-            total += 1
-
-            stats[category] = stats.get(category, 0) + 1
-
-            print(f"✓ {item.name}")
-            print(f"  → {category}")
-
-        except Exception as e:
-
-            failed += 1
-
-            print(f"✗ Could not move {item.name}")
-            print(f"  Reason: {e}")
-
-    print("\n" + "=" * 60)
-    print("SUMMARY")
-    print("=" * 60)
-
-    for category in sorted(stats):
-
-        print(f"{category:<15}: {stats[category]}")
-
-    print("-" * 60)
-
-    print(f"Moved Files     : {total}")
-    print(f"Skipped Files   : {skipped}")
-    print(f"Failed Files    : {failed}")
-
-    print(f"Time Taken      : {time.time()-start:.2f} seconds")
-
-    print("=" * 60)
-=======
     for file in files:
 
         if is_ignored(
@@ -737,8 +734,6 @@ def main():
         Fore.MAGENTA
         + "=" * 60
     )
->>>>>>> d6961ad (Release Smart File Organizer v2.0)
-
 
 if __name__ == "__main__":
     main()
