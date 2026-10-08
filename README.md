@@ -1,90 +1,325 @@
-# Smart File Organizer
+# 📂 Smart File Organizer
 
-A simple Python utility that automatically organizes files inside the Downloads folder and gives the choice to user to select the location.
+A lightweight and configurable Python command-line utility that automatically organizes files into category-based folders based on their extensions.
 
-[In progress for version 2.0]
-[For now, it doesn't have GUI]
+The project started as a simple file-sorting script and has evolved into a safer, configurable CLI utility with recursive scanning, dry-run support, duplicate-name handling, reporting, logging, configuration validation, and automated tests.
 
-[Updates in progress, hold your seatbelts due to delay & testing and maybe delayed]
+## ✨ Features
 
-[Though it's simple n time consuming, it will be worth it...planned to be updated soon.]
+### Core Organization
 
-## Features
+* Automatically categorizes files based on their extensions
+* Supports categories such as:
 
-- Organizes files by extension
-- Creates folders automatically
-- Cross-platform using pathlib
-- Lightweight
+  * Images
+  * Documents
+  * Videos
+  * Music
+  * Archives
+  * Programs
+  * Others
+* Preserves existing files by generating unique destination names when duplicates exist
 
-## Categories
+### Safety Features
 
-- Images
-- Documents
-- Music
-- Videos
-- Archives
-- Programs
-- Others
+* Dry-run mode to preview changes without moving files
+* Skips hidden files when configured
+* Skips system files
+* Prevents organizer output folders from being scanned recursively
+* Handles file-operation errors without terminating the entire process
+* Validates custom configuration before using it
 
-## Run
+### CLI Features
+
+* Organize a specified folder
+* Recursive directory scanning
+* Dry-run preview
+* Report generation
+* Command-line help and usage information
+
+### Logging & Reporting
+
+* Operation logs are maintained separately
+* Optional organization reports can be generated
+* Reports contain information about processed files and organization results
+
+### Testing
+
+The project includes an automated pytest test suite covering:
+
+* File categorization
+* Duplicate destination handling
+* Hidden/system file handling
+* Dry-run behavior
+* Actual file movement
+* Recursive scanning
+* Configuration validation
+* Logging
+* Integration behavior
+
+**Current test status: 25 tests passed.**
+
+---
+
+## 🛠️ Tech Stack
+
+* **Python 3**
+* **pathlib** - filesystem handling
+* **shutil** - file movement
+* **argparse** - command-line interface
+* **JSON** - configuration
+* **logging** - operation logging
+* **Colorama** - terminal output
+* **pytest** - automated testing
+
+---
+
+## 📁 Project Structure
+
+smart-file-organizer/
+│
+├── organizer.py              # Main application
+├── README.md                 # Project documentation
+├── requirements.txt          # Python dependencies
+├── .gitignore
+│
+├── tests/
+│   └── test_organizer.py     # Automated test suite
+│
+├── logs/
+│   └── .gitkeep
+│
+└── reports/
+    └── .gitkeep
+
+---
+
+## 🚀 Installation
+
+Clone the repository:
 
 ```bash
-python organizer.py
+git clone <https://github.com/Yash-et/smart-file-organizer>
+cd smart-file-organizer
+```
 
+Install the dependencies:
 
----
-
-# Development Roadmap
-
-### v2 (Day 2)
-
-Add:
-
-- Custom folder path
-- Undo last operation
-- Skip duplicate files
-- Colored terminal output
-- Progress counter
-
-Estimated:
-+150 lines
+```bash
+pip install -r requirements.txt
+```
 
 ---
 
-### v3 (Day 3)
+## ▶️ Basic Usage
 
-Add:
+Run the organizer on a folder:
 
-- Logging
+```bash
+python organizer.py "path/to/folder"
+```
 
+For example:
 
----
-
-### v5 (Weekend Release)
-
-Transform it into a polished application:
-
-- GUI using `tkinter` or `customtkinter`
-- Drag-and-drop folder selection
-- Folder icons
-- Dark mode
-- Progress bar
-- Search and filter
-- Settings saved to JSON
-- Windows executable via `pyinstaller`
-- GitHub Releases page with downloadable `.exe`
+```bash
+python organizer.py "C:\Users\YourName\Downloads"
+```
 
 ---
 
-## After Week 1
+## 🔍 Dry Run
 
-We'll start **Week 2: Image Converter Pro**, following the same incremental approach:
+Preview what would happen without moving any files:
 
-- **v1:** Convert PNG, JPG, JPEG, WEBP, BMP
-- **v2:** Batch conversion and resizing
-- **v3:** Compression, watermarking, and metadata handling
-- **v4:** GUI with drag-and-drop, previews, and progress tracking
-- **v5:** Standalone desktop application with an installer
+```bash
+python organizer.py "path/to/folder" --dry-run
+```
 
-This progression will give you two polished, practical repositories with clear commit history and increasing complexity, making them much stronger portfolio pieces than uploading a single finished script.
-# smart-file-organizer
+Dry-run mode does not create destination folders or move files.
+
+This makes it useful for safely checking the organization plan before applying changes.
+
+---
+
+## 📂 Recursive Organization
+
+To scan files inside subdirectories:
+
+```bash
+python organizer.py "path/to/folder" --recursive
+```
+
+The organizer automatically avoids scanning its own generated category folders during recursive processing.
+
+---
+
+## 📊 Generate a Report
+
+A report can be generated while organizing:
+
+```bash
+python organizer.py "path/to/folder" --report
+```
+
+Generated reports are stored separately from the source files.
+
+---
+
+## ⚙️ Configuration
+
+The organizer supports a JSON-based configuration system.
+
+Configuration can control:
+
+* File categories
+* File extensions
+* Hidden-file handling
+* System-file handling
+* The fallback `Others` directory
+
+Invalid configuration values are detected and the application safely falls back to the default configuration.
+
+This allows the organizer to be adapted to different workflows without changing the core Python code.
+
+---
+
+## 🧪 Running Tests
+
+Install pytest if required:
+
+```bash
+pip install pytest
+```
+
+Run the complete test suite:
+
+```bash
+pytest -v
+```
+
+Current test coverage includes 25 automated tests for the organizer's core functionality and integration behavior.
+
+---
+
+## 🖥️ Example Workflow
+
+Before:
+
+```text
+Downloads/
+├── photo.jpg
+├── report.pdf
+├── song.mp3
+├── archive.zip
+└── presentation.pptx
+```
+
+After running the organizer:
+
+```text
+Downloads/
+├── Images/
+│   └── photo.jpg
+│
+├── Documents/
+│   ├── report.pdf
+│   └── presentation.pptx
+│
+├── Music/
+│   └── song.mp3
+│
+└── Archives/
+    └── archive.zip
+```
+
+---
+
+## 🔐 Design Principles
+
+The project is designed around a few practical principles:
+
+**Safety first**
+
+Files should not be moved unexpectedly. Dry-run mode and configuration validation provide an additional safety layer.
+
+**Non-destructive organization**
+
+Existing files are not overwritten. When a destination filename already exists, a unique filename is generated.
+
+**Configurable behavior**
+
+File categories and supported extensions can be customized without modifying the application's core logic.
+
+**Testable functionality**
+
+Important filesystem and organization behaviors are covered by automated tests.
+
+**Simple CLI**
+
+The project remains lightweight and usable directly from the terminal without requiring a graphical interface.
+
+---
+
+## 📈 Project Versions
+
+### v1.0
+
+Initial file organization utility.
+
+### v1.1
+
+Improved file categorization, duplicate handling, safety checks, and user-friendly output.
+
+### v2.0
+
+Introduced:
+
+* Command-line arguments
+* Dry-run mode
+* Recursive scanning
+* Logging
+* Report generation
+* Configurable categories
+* Safer filesystem handling
+
+### v2.1
+
+Introduced:
+
+* Configuration validation
+* Improved dry-run protection
+* Recursive output-folder protection
+* Expanded automated testing
+* 25 passing pytest tests
+* Cleaned project configuration and Git ignore rules
+
+---
+
+## 🔮 Future Development
+
+Potential future improvements include:
+
+* Graphical user interface
+* Custom category management through the UI
+* Organization history
+* Undo functionality
+* File preview
+* Scheduled organization
+* More detailed statistics
+* Cross-platform packaging
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+See the `LICENSE` file for details.
+
+---
+
+## 👨‍💻 Author
+
+**Yash**
+
+Built as a practical Python project focused on filesystem automation, CLI development, configuration management, and software testing.

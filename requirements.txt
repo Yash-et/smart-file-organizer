@@ -1,6 +1,2 @@
-<<<<<<< HEAD
-# Smart File Organizer v1.1
-# No third-party packages required.
-=======
 colorama>=0.4.6
->>>>>>> d6961ad (Release Smart File Organizer v2.0)
+pytest
