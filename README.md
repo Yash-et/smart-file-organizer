@@ -75,23 +75,21 @@ The project includes an automated pytest test suite covering:
 ---
 
 ## 📁 Project Structure
-
 smart-file-organizer/
 │
-├── organizer.py              # Main application
-├── README.md                 # Project documentation
-├── requirements.txt          # Python dependencies
+├── organizer.py          # Main application
+├── README.md             # Project documentation
+├── requirements.txt      # Python dependencies
 ├── .gitignore
 │
 ├── tests/
-│   └── test_organizer.py     # Automated test suite
+│   └── test_organizer.py # Automated test suite
 │
 ├── logs/
 │   └── .gitkeep
 │
 └── reports/
     └── .gitkeep
-
 ---
 
 ## 🚀 Installation
