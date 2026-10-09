@@ -326,3 +326,5 @@ See the `LICENSE` file for details.
 Built as a practical Python project focused on filesystem automation, CLI development, configuration management, and software testing.
 
 Better UI in production.
+
+[Update: Already updated with UI part, sample images will be updated here soon...Thank You all for the wait & your patience.]
