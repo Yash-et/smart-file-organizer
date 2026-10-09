@@ -1,3 +1,4 @@
 # Smart File Organizer dependencies
 colorama>=0.4.6
 pytest
+customtkinter
