@@ -15,6 +15,7 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 APP_TITLE = "Smart File Organizer"
+APP_VERSION = "3.1"
 WINDOW_SIZE = "1100x720"
 
 
@@ -22,7 +23,7 @@ class SmartFileOrganizerApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title(APP_TITLE)
+        self.title(f"{APP_TITLE} v{APP_VERSION}")
         self.geometry(WINDOW_SIZE)
         self.minsize(900, 600)
 
@@ -31,7 +32,9 @@ class SmartFileOrganizerApp(ctk.CTk):
             value="Select a folder to preview its organization."
         )
 
-        self.preview_rows = []
+        # Each preview item stores: (source file, category, target path).
+        self.preview_items = []
+        self.preview_folder = None
 
         self._configure_layout()
         self._build_sidebar()
@@ -62,15 +65,11 @@ class SmartFileOrganizerApp(ctk.CTk):
 
         ctk.CTkLabel(
             self.sidebar,
-            text="Version 3.0 · Preview",
+            text=f"Version {APP_VERSION} · GUI",
             text_color="gray",
         ).pack(padx=18, pady=(0, 28), anchor="w")
 
-        for label in (
-            "Dashboard",
-            "Organize Files",
-            "Settings",
-        ):
+        for label in ("Dashboard", "Organize Files", "Settings"):
             ctk.CTkButton(
                 self.sidebar,
                 text=label,
@@ -83,13 +82,13 @@ class SmartFileOrganizerApp(ctk.CTk):
 
         ctk.CTkLabel(
             self.sidebar,
-            text="Safe preview mode",
+            text="Preview before moving",
             text_color="#67d5a5",
         ).pack(side="bottom", padx=18, pady=24, anchor="w")
 
     def _build_main_panel(self):
         self.main = ctk.CTkFrame(self, corner_radius=0)
-        self.main.grid(row=0, column=1, sticky="nsew", padx=0, pady=0)
+        self.main.grid(row=0, column=1, sticky="nsew")
 
         self.main.grid_columnconfigure(0, weight=1)
         self.main.grid_rowconfigure(5, weight=1)
@@ -102,7 +101,7 @@ class SmartFileOrganizerApp(ctk.CTk):
 
         ctk.CTkLabel(
             self.main,
-            text="Inspect proposed destinations before moving anything.",
+            text="Inspect destinations, then confirm before moving files.",
             text_color="gray",
         ).grid(row=1, column=0, sticky="w", padx=28, pady=(0, 18))
 
@@ -146,6 +145,16 @@ class SmartFileOrganizerApp(ctk.CTk):
         )
         self.preview_button.pack(side="left")
 
+        self.organize_button = ctk.CTkButton(
+            action_frame,
+            text="Organize Files",
+            fg_color="#16845b",
+            hover_color="#116b49",
+            state="disabled",
+            command=self._organize_files,
+        )
+        self.organize_button.pack(side="left", padx=(10, 0))
+
         self.clear_button = ctk.CTkButton(
             action_frame,
             text="Clear Preview",
@@ -165,7 +174,7 @@ class SmartFileOrganizerApp(ctk.CTk):
             row=4, column=0, sticky="ew", padx=28, pady=(0, 8)
         )
 
-        # Treeview provides a scrollable table for preview results.
+        # Scrollable preview table.
         table_frame = ctk.CTkFrame(self.main)
         table_frame.grid(
             row=5, column=0, sticky="nsew", padx=28, pady=(0, 12)
@@ -206,7 +215,9 @@ class SmartFileOrganizerApp(ctk.CTk):
         self.preview_table.heading("filename", text="File name")
         self.preview_table.heading("extension", text="Extension")
         self.preview_table.heading("category", text="Category")
-        self.preview_table.heading("destination", text="Proposed destination")
+        self.preview_table.heading(
+            "destination", text="Proposed destination"
+        )
 
         self.preview_table.column("filename", width=230, minwidth=120)
         self.preview_table.column("extension", width=90, minwidth=70)
@@ -231,23 +242,22 @@ class SmartFileOrganizerApp(ctk.CTk):
         ).grid(row=6, column=0, sticky="ew", padx=28, pady=(0, 18))
 
     # --------------------------------------------------
-    # FOLDER SELECTION
+    # FOLDER AND CONFIGURATION
     # --------------------------------------------------
 
     def _browse_folder(self):
         folder = filedialog.askdirectory(
-            title="Select a folder to preview"
+            title="Select a folder to organize"
         )
 
         if folder:
             self.selected_folder.set(folder)
-            self.status_text.set("Folder selected. Ready to preview.")
+            self._invalidate_preview()
+            self.status_text.set(
+                "Folder selected. Generate a new preview before organizing."
+            )
 
-    # --------------------------------------------------
-    # PREVIEW ENGINE
-    # --------------------------------------------------
-
-    def _preview_organization(self):
+    def _get_selected_folder(self):
         raw_folder = self.selected_folder.get().strip()
 
         if not raw_folder:
@@ -255,7 +265,7 @@ class SmartFileOrganizerApp(ctk.CTk):
                 "Folder required",
                 "Please select a folder first.",
             )
-            return
+            return None
 
         folder = Path(raw_folder).expanduser()
 
@@ -264,64 +274,74 @@ class SmartFileOrganizerApp(ctk.CTk):
                 "Invalid folder",
                 "The selected path does not exist or is not a directory.",
             )
-            return
+            return None
 
-        # Avoid load_config(): it can create config.json if missing.
+        return folder.resolve()
+
+    def _load_config_safely(self):
+        # Do not call load_config() when the file is absent because the
+        # CLI implementation may create config.json as a side effect.
         config_path = Path(organizer.CONFIG_FILE)
 
         if config_path.exists():
-            try:
-                config = organizer.load_config()
-            except Exception as error:
-                messagebox.showerror(
-                    "Configuration error",
-                    f"Could not load configuration:\n{error}",
-                )
-                return
-        else:
-            # Use built-in defaults without writing a config file.
-            config = organizer.DEFAULT_CONFIG
+            return organizer.load_config()
 
-        self._clear_table_only()
+        return organizer.DEFAULT_CONFIG
+
+    def _collect_preview_items(self, folder, config):
+        files = organizer.get_files(folder, recursive=False)
+        files = [
+            file for file in files
+            if not organizer.is_ignored(file, config)
+        ]
+
+        items = []
+        category_counts = Counter()
+        planned_destinations = set()
+
+        for file in sorted(files, key=lambda item: item.name.lower()):
+            category = organizer.get_category(file.suffix, config)
+            destination = folder / category
+            target = destination / file.name
+
+            # Avoid existing files and collisions with other preview items.
+            counter = 1
+            while (
+                target.exists()
+                or str(target).casefold() in planned_destinations
+            ):
+                target = destination / (
+                    f"{file.stem}_{counter}{file.suffix}"
+                )
+                counter += 1
+
+            planned_destinations.add(str(target).casefold())
+            items.append((file, category, target))
+            category_counts[category] += 1
+
+        return items, category_counts
+
+    # --------------------------------------------------
+    # PREVIEW
+    # --------------------------------------------------
+
+    def _preview_organization(self):
+        folder = self._get_selected_folder()
+
+        if folder is None:
+            return
 
         try:
-            # Use the engine's existing file discovery function.
-            # Preview scans only the selected folder's immediate files.
-            files = organizer.get_files(folder, recursive=False)
+            config = self._load_config_safely()
+            items, category_counts = self._collect_preview_items(
+                folder, config
+            )
 
-            # Respect the same hidden/system file rules as the CLI.
-            files = [
-                file for file in files
-                if not organizer.is_ignored(file, config)
-            ]
+            self._clear_table_only()
+            self.preview_items = items
+            self.preview_folder = folder
 
-            category_counts = Counter()
-            preview_count = 0
-
-            # Track planned destinations so duplicate names within this
-            # preview receive distinct proposed filenames.
-            planned_destinations = set()
-
-            for file in sorted(files, key=lambda item: item.name.lower()):
-                category = organizer.get_category(file.suffix, config)
-                destination = folder / category
-                target = destination / file.name
-
-                # Match existing destination conflict behavior, while
-                # also accounting for collisions within this preview.
-                counter = 1
-                while (
-                    target.exists()
-                    or str(target).casefold() in planned_destinations
-                ):
-                    target = (
-                        destination
-                        / f"{file.stem}_{counter}{file.suffix}"
-                    )
-                    counter += 1
-
-                planned_destinations.add(str(target).casefold())
-
+            for file, category, target in items:
                 self.preview_table.insert(
                     "",
                     "end",
@@ -333,35 +353,184 @@ class SmartFileOrganizerApp(ctk.CTk):
                     ),
                 )
 
-                category_counts[category] += 1
-                preview_count += 1
-
-            self.preview_rows = files
-
-            if preview_count == 0:
-                self.summary_label.configure(text="No eligible files found")
+            if not items:
+                self.summary_label.configure(
+                    text="No eligible files found"
+                )
                 self.status_text.set(
                     "Scan complete. No eligible files were found."
                 )
             else:
                 summary = "  |  ".join(
                     f"{category}: {count}"
-                    for category, count in sorted(category_counts.items())
+                    for category, count in sorted(
+                        category_counts.items()
+                    )
                 )
-
                 self.summary_label.configure(
-                    text=f"{preview_count} file(s) found  |  {summary}"
+                    text=f"{len(items)} file(s) found  |  {summary}"
                 )
                 self.status_text.set(
-                    "Preview complete. No files were moved or directories created."
+                    "Preview ready. No files have been moved."
                 )
 
+            self.organize_button.configure(
+                state="normal" if items else "disabled"
+            )
+
         except Exception as error:
+            self._invalidate_preview()
             self.status_text.set("Preview failed.")
             messagebox.showerror(
                 "Preview error",
                 f"Could not generate the preview:\n{error}",
             )
+
+    # --------------------------------------------------
+    # ACTUAL ORGANIZATION
+    # --------------------------------------------------
+
+    def _organize_files(self):
+        folder = self._get_selected_folder()
+
+        if folder is None:
+            return
+
+        # Require a preview for the currently selected folder.
+        if not self.preview_items or self.preview_folder != folder:
+            messagebox.showwarning(
+                "Preview required",
+                "Generate a preview for this folder before organizing.",
+            )
+            return
+
+        # Refresh the preview immediately before confirmation. This helps
+        # account for files or destination conflicts changed since scanning.
+        try:
+            config = self._load_config_safely()
+            items, _ = self._collect_preview_items(folder, config)
+
+            self.preview_items = items
+            self.preview_folder = folder
+            self._refresh_preview_table(items)
+
+        except Exception as error:
+            messagebox.showerror(
+                "Preparation failed",
+                f"Could not refresh the preview:\n{error}",
+            )
+            return
+
+        if not items:
+            self.organize_button.configure(state="disabled")
+            self.summary_label.configure(text="No eligible files found")
+            self.status_text.set("Nothing to organize.")
+            return
+
+        confirmed = messagebox.askyesno(
+            "Confirm file organization",
+            f"Organize {len(items)} file(s) in this folder?\n\n"
+            f"{folder}\n\n"
+            "Files will be moved into category subfolders. "
+            "Existing files will not be intentionally overwritten.\n\n"
+            "This action moves files and is not automatically reversible.",
+            icon="warning",
+        )
+
+        if not confirmed:
+            self.status_text.set(
+                "Organization cancelled. No files were moved."
+            )
+            return
+
+        self.organize_button.configure(state="disabled")
+        self.preview_button.configure(state="disabled")
+        self.status_text.set("Organizing files...")
+
+        moved = 0
+        failed = 0
+        failures = []
+
+        try:
+            for file, category, _planned_target in items:
+                # The engine selects a unique destination again at move time.
+                success, target = organizer.organize_file(
+                    file,
+                    category,
+                    folder,
+                    dry_run=False,
+                )
+
+                if success:
+                    moved += 1
+                else:
+                    failed += 1
+                    failures.append(file.name)
+
+            # Rescan so the table reflects files remaining in the root.
+            self._preview_organization()
+
+            self.summary_label.configure(
+                text=f"Organization complete  |  Moved: {moved}  |  Failed: {failed}"
+            )
+
+            if failed:
+                self.status_text.set(
+                    f"Finished with {failed} failure(s). "
+                    "See the error summary for details."
+                )
+                messagebox.showwarning(
+                    "Organization finished with errors",
+                    f"Successfully moved: {moved}\n"
+                    f"Failed: {failed}\n\n"
+                    f"Files that failed:\n"
+                    + "\n".join(failures[:15])
+                    + (
+                        "\n..." if len(failures) > 15 else ""
+                    ),
+                )
+            else:
+                self.status_text.set(
+                    f"Organization complete. {moved} file(s) moved."
+                )
+                messagebox.showinfo(
+                    "Organization complete",
+                    f"Successfully organized {moved} file(s).\n\n"
+                    f"Location:\n{folder}",
+                )
+
+        except Exception as error:
+            messagebox.showerror(
+                "Organization error",
+                f"An unexpected error occurred:\n{error}\n\n"
+                "Some files may already have been moved. "
+                "Generate a new preview to inspect the folder.",
+            )
+            self.status_text.set(
+                "Organization stopped unexpectedly. Please rescan."
+            )
+
+        finally:
+            self.preview_button.configure(state="normal")
+
+    def _refresh_preview_table(self, items):
+        self._clear_table_only()
+
+        for file, category, target in items:
+            self.preview_table.insert(
+                "",
+                "end",
+                values=(
+                    file.name,
+                    file.suffix.lower() or "(none)",
+                    category,
+                    str(target),
+                ),
+            )
+
+        self.organize_button.configure(
+            state="normal" if items else "disabled"
+        )
 
     # --------------------------------------------------
     # CLEAR / NAVIGATION
@@ -371,20 +540,25 @@ class SmartFileOrganizerApp(ctk.CTk):
         for item in self.preview_table.get_children():
             self.preview_table.delete(item)
 
-    def _clear_preview(self):
+    def _invalidate_preview(self):
+        self.preview_items = []
+        self.preview_folder = None
+        self.organize_button.configure(state="disabled")
         self._clear_table_only()
-        self.preview_rows = []
         self.summary_label.configure(text="No preview generated")
+
+    def _clear_preview(self):
+        self._invalidate_preview()
         self.status_text.set("Preview cleared. No files were changed.")
 
     def _show_section(self, section):
         if section == "Organize Files":
             self.status_text.set(
-                "Select a folder and choose Preview Organization."
+                "Select a folder, preview it, then confirm to organize."
             )
         elif section == "Dashboard":
             self.status_text.set(
-                "Dashboard: preview files safely before organizing."
+                "Preview files safely before organizing."
             )
         elif section == "Settings":
             self.status_text.set(
