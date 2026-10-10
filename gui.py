@@ -727,7 +727,6 @@ class SmartFileOrganizerApp(ctk.CTk):
                 "Settings currently use the project's config.json defaults."
             )
 
-
 if __name__ == "__main__":
     app = SmartFileOrganizerApp()
     app.mainloop()
