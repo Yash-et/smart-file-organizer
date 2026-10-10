@@ -1,24 +1,19 @@
 from pathlib import Path
 from collections import Counter
+import queue
+import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-
 import customtkinter as ctk
 import organizer
 
-
-# --------------------------------------------------
-# APPLICATION CONFIGURATION
-# --------------------------------------------------
-
+'''APPLICATION CONFIGURATION'''
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 APP_TITLE = "Smart File Organizer"
-APP_VERSION = "3.1"
+APP_VERSION = "3.2"
 WINDOW_SIZE = "1100x720"
-
-
 class SmartFileOrganizerApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -32,17 +27,23 @@ class SmartFileOrganizerApp(ctk.CTk):
             value="Select a folder to preview its organization."
         )
 
-        # Each preview item stores: (source file, category, target path).
+        '''Each preview item stores: (source file, category, target path).'''
         self.preview_items = []
         self.preview_folder = None
+
+        '''Background organization state. Only the GUI thread may update widgets.'''
+        self.is_organizing = False
+        self.cancel_requested = threading.Event()
+        self.worker_queue = queue.Queue()
 
         self._configure_layout()
         self._build_sidebar()
         self._build_main_panel()
 
-    # --------------------------------------------------
-    # LAYOUT
-    # --------------------------------------------------
+        '''Poll worker messages from the GUI thread.'''
+        self.after(100, self._process_worker_events)
+
+    '''LAYOUT'''
 
     def _configure_layout(self):
         self.grid_columnconfigure(1, weight=1)
@@ -91,7 +92,7 @@ class SmartFileOrganizerApp(ctk.CTk):
         self.main.grid(row=0, column=1, sticky="nsew")
 
         self.main.grid_columnconfigure(0, weight=1)
-        self.main.grid_rowconfigure(5, weight=1)
+        self.main.grid_rowconfigure(6, weight=1)
 
         ctk.CTkLabel(
             self.main,
@@ -126,12 +127,15 @@ class SmartFileOrganizerApp(ctk.CTk):
             row=1, column=0, sticky="ew", padx=14, pady=(0, 12)
         )
 
-        ctk.CTkButton(
+        self.browse_button = ctk.CTkButton(
             folder_frame,
             text="Browse",
             width=100,
             command=self._browse_folder,
-        ).grid(row=1, column=1, padx=(0, 14), pady=(0, 12))
+        )
+        self.browse_button.grid(
+            row=1, column=1, padx=(0, 14), pady=(0, 12)
+        )
 
         action_frame = ctk.CTkFrame(self.main, fg_color="transparent")
         action_frame.grid(
@@ -164,6 +168,35 @@ class SmartFileOrganizerApp(ctk.CTk):
         )
         self.clear_button.pack(side="left", padx=(10, 0))
 
+        self.cancel_button = ctk.CTkButton(
+            action_frame,
+            text="Cancel",
+            width=90,
+            fg_color="#9b2c2c",
+            hover_color="#7f1d1d",
+            state="disabled",
+            command=self._cancel_organization,
+        )
+        self.cancel_button.pack(side="left", padx=(10, 0))
+
+        progress_frame = ctk.CTkFrame(self.main, fg_color="transparent")
+        progress_frame.grid(
+            row=4, column=0, sticky="ew", padx=28, pady=(0, 10)
+        )
+        progress_frame.grid_columnconfigure(0, weight=1)
+
+        self.progress_label = ctk.CTkLabel(
+            progress_frame,
+            text="Ready",
+            anchor="w",
+            text_color="gray",
+        )
+        self.progress_label.grid(row=0, column=0, sticky="ew", pady=(0, 5))
+
+        self.progress_bar = ctk.CTkProgressBar(progress_frame)
+        self.progress_bar.grid(row=1, column=0, sticky="ew")
+        self.progress_bar.set(0)
+
         self.summary_label = ctk.CTkLabel(
             self.main,
             text="No preview generated",
@@ -171,13 +204,13 @@ class SmartFileOrganizerApp(ctk.CTk):
             font=ctk.CTkFont(size=14, weight="bold"),
         )
         self.summary_label.grid(
-            row=4, column=0, sticky="ew", padx=28, pady=(0, 8)
+            row=5, column=0, sticky="ew", padx=28, pady=(0, 8)
         )
 
-        # Scrollable preview table.
+        '''Scrollable preview table.'''
         table_frame = ctk.CTkFrame(self.main)
         table_frame.grid(
-            row=5, column=0, sticky="nsew", padx=28, pady=(0, 12)
+            row=6, column=0, sticky="nsew", padx=28, pady=(0, 12)
         )
         table_frame.grid_rowconfigure(0, weight=1)
         table_frame.grid_columnconfigure(0, weight=1)
@@ -239,11 +272,9 @@ class SmartFileOrganizerApp(ctk.CTk):
             textvariable=self.status_text,
             anchor="w",
             text_color="gray",
-        ).grid(row=6, column=0, sticky="ew", padx=28, pady=(0, 18))
+        ).grid(row=7, column=0, sticky="ew", padx=28, pady=(0, 18))
 
-    # --------------------------------------------------
-    # FOLDER AND CONFIGURATION
-    # --------------------------------------------------
+    '''FOLDER AND CONFIGURATION'''
 
     def _browse_folder(self):
         folder = filedialog.askdirectory(
@@ -279,8 +310,9 @@ class SmartFileOrganizerApp(ctk.CTk):
         return folder.resolve()
 
     def _load_config_safely(self):
-        # Do not call load_config() when the file is absent because the
-        # CLI implementation may create config.json as a side effect.
+        '''Do not call load_config() when the file is absent because the
+        CLI implementation may create config.json as a side effect.'''
+        
         config_path = Path(organizer.CONFIG_FILE)
 
         if config_path.exists():
@@ -304,7 +336,7 @@ class SmartFileOrganizerApp(ctk.CTk):
             destination = folder / category
             target = destination / file.name
 
-            # Avoid existing files and collisions with other preview items.
+            '''Avoid existing files and collisions with other preview items.'''
             counter = 1
             while (
                 target.exists()
@@ -321,9 +353,7 @@ class SmartFileOrganizerApp(ctk.CTk):
 
         return items, category_counts
 
-    # --------------------------------------------------
-    # PREVIEW
-    # --------------------------------------------------
+    '''PREVIEW'''
 
     def _preview_organization(self):
         folder = self._get_selected_folder()
@@ -386,17 +416,17 @@ class SmartFileOrganizerApp(ctk.CTk):
                 f"Could not generate the preview:\n{error}",
             )
 
-    # --------------------------------------------------
-    # ACTUAL ORGANIZATION
-    # --------------------------------------------------
+    '''ACTUAL ORGANIZATION'''
 
     def _organize_files(self):
-        folder = self._get_selected_folder()
+        if self.is_organizing:
+            return
 
+        folder = self._get_selected_folder()
         if folder is None:
             return
 
-        # Require a preview for the currently selected folder.
+        '''Require a preview for the currently selected folder.'''
         if not self.preview_items or self.preview_folder != folder:
             messagebox.showwarning(
                 "Preview required",
@@ -404,20 +434,17 @@ class SmartFileOrganizerApp(ctk.CTk):
             )
             return
 
-        # Refresh the preview immediately before confirmation. This helps
-        # account for files or destination conflicts changed since scanning.
+        '''Refresh the preview immediately before confirmation.'''
         try:
             config = self._load_config_safely()
             items, _ = self._collect_preview_items(folder, config)
-
             self.preview_items = items
             self.preview_folder = folder
             self._refresh_preview_table(items)
-
         except Exception as error:
             messagebox.showerror(
                 "Preparation failed",
-                f"Could not refresh the preview:\n{error}",
+                f"Could not refresh the preview:\\n{error}",
             )
             return
 
@@ -425,15 +452,18 @@ class SmartFileOrganizerApp(ctk.CTk):
             self.organize_button.configure(state="disabled")
             self.summary_label.configure(text="No eligible files found")
             self.status_text.set("Nothing to organize.")
+            self.progress_label.configure(text="No eligible files found.")
+            self.progress_bar.set(0)
             return
 
         confirmed = messagebox.askyesno(
             "Confirm file organization",
-            f"Organize {len(items)} file(s) in this folder?\n\n"
-            f"{folder}\n\n"
+            f"Organize {len(items)} file(s) in this folder?\\n\\n"
+            f"{folder}\\n\\n"
             "Files will be moved into category subfolders. "
-            "Existing files will not be intentionally overwritten.\n\n"
-            "This action moves files and is not automatically reversible.",
+            "Existing files will not be intentionally overwritten.\\n\\n"
+            "Cancellation takes effect between file operations. "
+            "Files already moved will not be automatically restored.",
             icon="warning",
         )
 
@@ -443,75 +473,209 @@ class SmartFileOrganizerApp(ctk.CTk):
             )
             return
 
+        self.is_organizing = True
+        self.cancel_requested.clear()
+        self.progress_bar.set(0)
+        self.progress_label.configure(
+            text=f"Preparing to organize {len(items)} file(s)..."
+        )
+        self.status_text.set("Organization in progress...")
+
+        '''Disable controls that could invalidate the current operation.'''
         self.organize_button.configure(state="disabled")
         self.preview_button.configure(state="disabled")
-        self.status_text.set("Organizing files...")
+        self.clear_button.configure(state="disabled")
+        self.browse_button.configure(state="disabled")
+        self.folder_entry.configure(state="disabled")
+        self.cancel_button.configure(state="normal")
 
+        worker = threading.Thread(
+            target=self._organization_worker,
+            args=(items, folder),
+            daemon=True,
+        )
+        worker.start()
+
+    def _organization_worker(self, items, folder):
+        """Move files in a worker thread without touching GUI widgets."""
+        total = len(items)
         moved = 0
         failed = 0
         failures = []
+        processed = 0
 
-        try:
-            for file, category, _planned_target in items:
-                # The engine selects a unique destination again at move time.
+        for index, (file, category, _planned_target) in enumerate(
+            items, start=1
+        ):
+            if self.cancel_requested.is_set():
+                break
+
+            self.worker_queue.put(("current", index, total, file.name))
+
+            try:
                 success, target = organizer.organize_file(
                     file,
                     category,
                     folder,
                     dry_run=False,
                 )
-
                 if success:
                     moved += 1
                 else:
                     failed += 1
-                    failures.append(file.name)
+                    failures.append(
+                        (file.name, "Organizer reported failure")
+                    )
+            except Exception as error:
+                failed += 1
+                failures.append((file.name, str(error)))
 
-            # Rescan so the table reflects files remaining in the root.
-            self._preview_organization()
-
-            self.summary_label.configure(
-                text=f"Organization complete  |  Moved: {moved}  |  Failed: {failed}"
+            processed += 1
+            self.worker_queue.put(
+                ("progress", processed, total, file.name)
             )
 
-            if failed:
-                self.status_text.set(
-                    f"Finished with {failed} failure(s). "
-                    "See the error summary for details."
-                )
-                messagebox.showwarning(
-                    "Organization finished with errors",
-                    f"Successfully moved: {moved}\n"
-                    f"Failed: {failed}\n\n"
-                    f"Files that failed:\n"
-                    + "\n".join(failures[:15])
-                    + (
-                        "\n..." if len(failures) > 15 else ""
-                    ),
-                )
-            else:
-                self.status_text.set(
-                    f"Organization complete. {moved} file(s) moved."
-                )
-                messagebox.showinfo(
-                    "Organization complete",
-                    f"Successfully organized {moved} file(s).\n\n"
-                    f"Location:\n{folder}",
-                )
+        result = {
+            "moved": moved,
+            "failed": failed,
+            "failures": failures,
+            "processed": processed,
+            "total": total,
+            "cancelled": (
+                self.cancel_requested.is_set() and processed < total
+            ),
+        }
+        self.worker_queue.put(("finished", result))
 
-        except Exception as error:
-            messagebox.showerror(
-                "Organization error",
-                f"An unexpected error occurred:\n{error}\n\n"
-                "Some files may already have been moved. "
-                "Generate a new preview to inspect the folder.",
+    def _cancel_organization(self):
+        if not self.is_organizing:
+            return
+
+        self.cancel_requested.set()
+        self.cancel_button.configure(state="disabled")
+        self.status_text.set(
+            "Cancellation requested. Finishing the current file operation..."
+        )
+        self.progress_label.configure(text="Cancellation requested...")
+
+    def _process_worker_events(self):
+        """Handle worker messages on the GUI's main thread."""
+        try:
+            while True:
+                event = self.worker_queue.get_nowait()
+                event_type = event[0]
+
+                if event_type == "current":
+                    _, index, total, filename = event
+                    self.progress_label.configure(
+                        text=f"Processing {index} of {total}: {filename}"
+                    )
+
+                elif event_type == "progress":
+                    _, processed, total, filename = event
+                    self.progress_bar.set(
+                        processed / total if total else 0
+                    )
+                    self.progress_label.configure(
+                        text=(
+                            f"{processed} of {total} processed — "
+                            f"{filename}"
+                        )
+                    )
+
+                elif event_type == "finished":
+                    self._finish_organization(event[1])
+
+        except queue.Empty:
+            pass
+        except tk.TclError:
+            return
+
+        try:
+            self.after(100, self._process_worker_events)
+        except tk.TclError:
+            pass
+
+    def _finish_organization(self, result):
+        """Restore the interface and summarize the completed operation."""
+        self.is_organizing = False
+
+        moved = result["moved"]
+        failed = result["failed"]
+        failures = result["failures"]
+        processed = result["processed"]
+        total = result["total"]
+        remaining = total - processed
+        cancelled = result["cancelled"]
+
+        self.preview_button.configure(state="normal")
+        self.clear_button.configure(state="normal")
+        self.browse_button.configure(state="normal")
+        self.folder_entry.configure(state="normal")
+        self.cancel_button.configure(state="disabled")
+
+        '''Rescan the source folder so the preview shows what remains.'''
+        self._preview_organization()
+
+        if total:
+            self.progress_bar.set(processed / total)
+
+        if cancelled:
+            self.progress_label.configure(
+                text=f"Cancelled after processing {processed} of {total} files."
             )
             self.status_text.set(
-                "Organization stopped unexpectedly. Please rescan."
+                "Operation cancelled. Files already moved remain in their destinations."
             )
+        elif failed:
+            self.progress_label.configure(
+                text=f"Finished with {failed} failure(s)."
+            )
+            self.status_text.set(
+                "Organization finished with errors. Review the summary."
+            )
+        else:
+            self.progress_label.configure(
+                text=f"Completed: {processed} of {total} files processed."
+            )
+            self.status_text.set("Organization complete.")
 
-        finally:
-            self.preview_button.configure(state="normal")
+        summary = (
+            f"Moved: {moved}  |  Failed: {failed}  |  "
+            f"Not processed: {remaining}"
+        )
+        if cancelled:
+            summary = "Cancelled  |  " + summary
+        self.summary_label.configure(text=summary)
+
+        if failures:
+            details = "\\n".join(
+                f"• {name}: {reason}" for name, reason in failures[:10]
+            )
+            if len(failures) > 10:
+                details += f"\\n...and {len(failures) - 10} more failure(s)."
+
+            messagebox.showwarning(
+                "Organization finished with errors",
+                f"Moved: {moved}\\n"
+                f"Failed: {failed}\\n"
+                f"Not processed: {remaining}\\n\\n"
+                f"{details}",
+            )
+        elif cancelled:
+            messagebox.showinfo(
+                "Organization cancelled",
+                f"Moved: {moved}\\n"
+                f"Failed: {failed}\\n"
+                f"Not processed: {remaining}\\n\\n"
+                "Files already moved were not automatically restored.",
+            )
+        else:
+            messagebox.showinfo(
+                "Organization complete",
+                f"Successfully organized {moved} file(s).\\n\\n"
+                f"Location:\\n{self.preview_folder}",
+            )
 
     def _refresh_preview_table(self, items):
         self._clear_table_only()
@@ -532,9 +696,7 @@ class SmartFileOrganizerApp(ctk.CTk):
             state="normal" if items else "disabled"
         )
 
-    # --------------------------------------------------
-    # CLEAR / NAVIGATION
-    # --------------------------------------------------
+    '''CLEAR / NAVIGATION'''
 
     def _clear_table_only(self):
         for item in self.preview_table.get_children():
@@ -564,7 +726,6 @@ class SmartFileOrganizerApp(ctk.CTk):
             self.status_text.set(
                 "Settings currently use the project's config.json defaults."
             )
-
 
 if __name__ == "__main__":
     app = SmartFileOrganizerApp()
