@@ -4,23 +4,16 @@ import queue
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-
 import customtkinter as ctk
 import organizer
 
-
-# --------------------------------------------------
-# APPLICATION CONFIGURATION
-# --------------------------------------------------
-
+'''APPLICATION CONFIGURATION'''
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 APP_TITLE = "Smart File Organizer"
 APP_VERSION = "3.2"
 WINDOW_SIZE = "1100x720"
-
-
 class SmartFileOrganizerApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -34,11 +27,11 @@ class SmartFileOrganizerApp(ctk.CTk):
             value="Select a folder to preview its organization."
         )
 
-        # Each preview item stores: (source file, category, target path).
+        '''Each preview item stores: (source file, category, target path).'''
         self.preview_items = []
         self.preview_folder = None
 
-        # Background organization state. Only the GUI thread may update widgets.
+        '''Background organization state. Only the GUI thread may update widgets.'''
         self.is_organizing = False
         self.cancel_requested = threading.Event()
         self.worker_queue = queue.Queue()
@@ -47,12 +40,10 @@ class SmartFileOrganizerApp(ctk.CTk):
         self._build_sidebar()
         self._build_main_panel()
 
-        # Poll worker messages from the GUI thread.
+        '''Poll worker messages from the GUI thread.'''
         self.after(100, self._process_worker_events)
 
-    # --------------------------------------------------
-    # LAYOUT
-    # --------------------------------------------------
+    '''LAYOUT'''
 
     def _configure_layout(self):
         self.grid_columnconfigure(1, weight=1)
@@ -216,7 +207,7 @@ class SmartFileOrganizerApp(ctk.CTk):
             row=5, column=0, sticky="ew", padx=28, pady=(0, 8)
         )
 
-        # Scrollable preview table.
+        '''Scrollable preview table.'''
         table_frame = ctk.CTkFrame(self.main)
         table_frame.grid(
             row=6, column=0, sticky="nsew", padx=28, pady=(0, 12)
@@ -283,9 +274,7 @@ class SmartFileOrganizerApp(ctk.CTk):
             text_color="gray",
         ).grid(row=7, column=0, sticky="ew", padx=28, pady=(0, 18))
 
-    # --------------------------------------------------
-    # FOLDER AND CONFIGURATION
-    # --------------------------------------------------
+    '''FOLDER AND CONFIGURATION'''
 
     def _browse_folder(self):
         folder = filedialog.askdirectory(
@@ -321,8 +310,9 @@ class SmartFileOrganizerApp(ctk.CTk):
         return folder.resolve()
 
     def _load_config_safely(self):
-        # Do not call load_config() when the file is absent because the
-        # CLI implementation may create config.json as a side effect.
+        '''Do not call load_config() when the file is absent because the
+        CLI implementation may create config.json as a side effect.'''
+        
         config_path = Path(organizer.CONFIG_FILE)
 
         if config_path.exists():
@@ -346,7 +336,7 @@ class SmartFileOrganizerApp(ctk.CTk):
             destination = folder / category
             target = destination / file.name
 
-            # Avoid existing files and collisions with other preview items.
+            '''Avoid existing files and collisions with other preview items.'''
             counter = 1
             while (
                 target.exists()
@@ -363,9 +353,7 @@ class SmartFileOrganizerApp(ctk.CTk):
 
         return items, category_counts
 
-    # --------------------------------------------------
-    # PREVIEW
-    # --------------------------------------------------
+    '''PREVIEW'''
 
     def _preview_organization(self):
         folder = self._get_selected_folder()
@@ -428,9 +416,7 @@ class SmartFileOrganizerApp(ctk.CTk):
                 f"Could not generate the preview:\n{error}",
             )
 
-    # --------------------------------------------------
-    # ACTUAL ORGANIZATION
-    # --------------------------------------------------
+    '''ACTUAL ORGANIZATION'''
 
     def _organize_files(self):
         if self.is_organizing:
@@ -440,7 +426,7 @@ class SmartFileOrganizerApp(ctk.CTk):
         if folder is None:
             return
 
-        # Require a preview for the currently selected folder.
+        '''Require a preview for the currently selected folder.'''
         if not self.preview_items or self.preview_folder != folder:
             messagebox.showwarning(
                 "Preview required",
@@ -448,7 +434,7 @@ class SmartFileOrganizerApp(ctk.CTk):
             )
             return
 
-        # Refresh the preview immediately before confirmation.
+        '''Refresh the preview immediately before confirmation.'''
         try:
             config = self._load_config_safely()
             items, _ = self._collect_preview_items(folder, config)
@@ -495,7 +481,7 @@ class SmartFileOrganizerApp(ctk.CTk):
         )
         self.status_text.set("Organization in progress...")
 
-        # Disable controls that could invalidate the current operation.
+        '''Disable controls that could invalidate the current operation.'''
         self.organize_button.configure(state="disabled")
         self.preview_button.configure(state="disabled")
         self.clear_button.configure(state="disabled")
@@ -603,7 +589,6 @@ class SmartFileOrganizerApp(ctk.CTk):
         except queue.Empty:
             pass
         except tk.TclError:
-            # The application may be closing while events are being polled.
             return
 
         try:
@@ -629,7 +614,7 @@ class SmartFileOrganizerApp(ctk.CTk):
         self.folder_entry.configure(state="normal")
         self.cancel_button.configure(state="disabled")
 
-        # Rescan the source folder so the preview shows what remains.
+        '''Rescan the source folder so the preview shows what remains.'''
         self._preview_organization()
 
         if total:
@@ -711,9 +696,7 @@ class SmartFileOrganizerApp(ctk.CTk):
             state="normal" if items else "disabled"
         )
 
-    # --------------------------------------------------
-    # CLEAR / NAVIGATION
-    # --------------------------------------------------
+    '''CLEAR / NAVIGATION'''
 
     def _clear_table_only(self):
         for item in self.preview_table.get_children():
@@ -743,7 +726,6 @@ class SmartFileOrganizerApp(ctk.CTk):
             self.status_text.set(
                 "Settings currently use the project's config.json defaults."
             )
-
 
 if __name__ == "__main__":
     app = SmartFileOrganizerApp()
