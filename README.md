@@ -327,4 +327,6 @@ Built as a practical Python project focused on filesystem automation, CLI develo
 
 Better UI in production.
 
-[Update: Already updated with UI part, sample images will be updated here soon...Thank You all for the wait & your patience.]
+[Update: Already updated with UI part, sample images will be updated here soon...Thank You all for the wait & your patience.
+
+Till then explore other repos.]
