@@ -665,6 +665,7 @@ class SmartFileOrganizerApp(ctk.CTk):
         failed = result["failed"]
         failures = result["failures"]
         processed = result["processed"]
+        history_errors = result.get("history_errors", [])
         total = result["total"]
         remaining = total - processed
         cancelled = result["cancelled"]
