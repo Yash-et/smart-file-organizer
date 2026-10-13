@@ -285,7 +285,24 @@ class SmartFileOrganizerApp(ctk.CTk):
             anchor="w",
             text_color="gray",
         ).grid(row=7, column=0, sticky="ew", padx=28, pady=(0, 18))
+    
+    def _open_history_file(self):
+        """Open the saved operation history using the default application."""
+        try:
+            history_path = operation_history.ensure_history_file()
 
+            if os.name == "nt":
+                os.startfile(str(history_path))
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", str(history_path)])
+            else:
+                subprocess.Popen(["xdg-open", str(history_path)])
+
+        except Exception as error:
+            messagebox.showerror(
+                "Could not open history",
+                f"Unable to open the operation history:\n{error}",
+            )
     '''FOLDER AND CONFIGURATION'''
 
     def _browse_folder(self):
