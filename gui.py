@@ -743,10 +743,18 @@ class SmartFileOrganizerApp(ctk.CTk):
                 "Files already moved were not automatically restored.",
             )
         else:
+            history_notice = ""
+            if history_errors:
+                history_notice = (
+                    "\n\nHistory logging warning: "
+                    f"{len(history_errors)} record(s) could not be saved."
+                )
+
             messagebox.showinfo(
                 "Organization complete",
-                f"Successfully organized {moved} file(s).\\n\\n"
-                f"Location:\\n{self.preview_folder}",
+                f"Successfully organized {moved} file(s).\n\n"
+                f"Location:\n{self.preview_folder}"
+                f"{history_notice}",
             )
 
     def _refresh_preview_table(self, items):
