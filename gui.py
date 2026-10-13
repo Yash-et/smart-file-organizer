@@ -729,6 +729,12 @@ class SmartFileOrganizerApp(ctk.CTk):
                 f"{details}",
             )
         elif cancelled:
+            history_notice = ""
+            if history_errors:
+                history_notice = (
+                    "\n\nHistory logging warning: "
+                    f"{len(history_errors)} record(s) could not be saved."
+                )
             messagebox.showinfo(
                 "Organization cancelled",
                 f"Moved: {moved}\\n"
