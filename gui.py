@@ -524,22 +524,30 @@ class SmartFileOrganizerApp(ctk.CTk):
             daemon=True,
         )
         worker.start()
-
+    
     def _organization_worker(self, items, folder):
-        """Move files in a worker thread without touching GUI widgets."""
+        """Move files and record each attempted operation."""
         total = len(items)
         moved = 0
         failed = 0
-        failures = []
         processed = 0
+        failures = []
+        history_errors = []
 
-        for index, (file, category, _planned_target) in enumerate(
+        for index, (file, category, planned_target) in enumerate(
             items, start=1
         ):
             if self.cancel_requested.is_set():
                 break
 
-            self.worker_queue.put(("current", index, total, file.name))
+            self.worker_queue.put(
+                ("current", index, total, file.name)
+            )
+
+            # Start with the preview destination as a fallback.
+            target = planned_target
+            status = "FAILED"
+            error_message = ""
 
             try:
                 success, target = organizer.organize_file(
@@ -548,18 +556,39 @@ class SmartFileOrganizerApp(ctk.CTk):
                     folder,
                     dry_run=False,
                 )
+
                 if success:
                     moved += 1
+                    status = "SUCCESS"
                 else:
                     failed += 1
+                    error_message = "Organizer reported failure"
                     failures.append(
-                        (file.name, "Organizer reported failure")
+                        (file.name, error_message)
                     )
+
             except Exception as error:
                 failed += 1
-                failures.append((file.name, str(error)))
+                error_message = str(error)
+                failures.append((file.name, error_message))
+
+            # History failures must not change the move result.
+            try:
+                operation_history.record_operation(
+                    source_folder=folder,
+                    source_file=file,
+                    destination=target,
+                    category=category,
+                    status=status,
+                    error=error_message,
+                )
+            except Exception as history_error:
+                history_errors.append(
+                    f"{file.name}: {history_error}"
+                )
 
             processed += 1
+
             self.worker_queue.put(
                 ("progress", processed, total, file.name)
             )
@@ -571,9 +600,12 @@ class SmartFileOrganizerApp(ctk.CTk):
             "processed": processed,
             "total": total,
             "cancelled": (
-                self.cancel_requested.is_set() and processed < total
+                self.cancel_requested.is_set()
+                and processed < total
             ),
+            "history_errors": history_errors,
         }
+
         self.worker_queue.put(("finished", result))
 
     def _cancel_organization(self):
