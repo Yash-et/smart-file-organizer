@@ -1,3 +1,4 @@
+from email import message
 import os
 import subprocess
 import sys
@@ -583,9 +584,12 @@ class SmartFileOrganizerApp(ctk.CTk):
                     error=error_message,
                 )
             except Exception as history_error:
-                history_errors.append(
-                    f"{file.name}: {history_error}"
+                message = (
+                    f"{file.name}: "
+                    f"{type(history_error).__name__}: {history_error}"
                 )
+                history_errors.append(message)
+                print(f"[HISTORY LOG ERROR] {message}")
 
             processed += 1
 
