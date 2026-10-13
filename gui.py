@@ -716,7 +716,11 @@ class SmartFileOrganizerApp(ctk.CTk):
             )
             if len(failures) > 10:
                 details += f"\\n...and {len(failures) - 10} more failure(s)."
-
+            if history_errors:
+                details += (
+                    "\n\nHistory logging warnings: "
+                    f"{len(history_errors)} record(s) could not be saved."
+                )
             messagebox.showwarning(
                 "Organization finished with errors",
                 f"Moved: {moved}\\n"
