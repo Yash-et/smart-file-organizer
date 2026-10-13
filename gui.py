@@ -1,3 +1,7 @@
+import os
+import subprocess
+import sys
+import operation_history
 from pathlib import Path
 from collections import Counter
 import queue
@@ -12,7 +16,7 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 APP_TITLE = "Smart File Organizer"
-APP_VERSION = "3.2"
+APP_VERSION = "3.3"
 WINDOW_SIZE = "1100x720"
 class SmartFileOrganizerApp(ctk.CTk):
     def __init__(self):
