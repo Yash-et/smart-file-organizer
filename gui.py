@@ -182,7 +182,15 @@ class SmartFileOrganizerApp(ctk.CTk):
             command=self._cancel_organization,
         )
         self.cancel_button.pack(side="left", padx=(10, 0))
-
+        
+        self.history_button = ctk.CTkButton(
+            action_frame,
+            text="Open History",
+            width=110,
+            command=self._open_history_file,
+        )
+        self.history_button.pack(side="left", padx=(10, 0))
+        
         progress_frame = ctk.CTkFrame(self.main, fg_color="transparent")
         progress_frame.grid(
             row=4, column=0, sticky="ew", padx=28, pady=(0, 10)
