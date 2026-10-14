@@ -311,6 +311,11 @@ Potential future improvements include:
 
 ---
 
+## Testing Stages
+
+<img width="1920" height="1080" alt="Screenshot (6875)" src="https://github.com/user-attachments/assets/01c0fe4a-0099-401c-853e-e6ae02beb683" />
+<h3 align="center">Smart File Organizer v3.3 </h3>
+
 ## 📄 License
 
 This project is licensed under the MIT License.
@@ -329,4 +334,4 @@ Better UI in production.
 
 [Update: Already updated with UI part, sample images will be updated here soon...Thank You all for the wait & your patience.
 
-Till then explore other repos.]
+Till then explore other repos...just for a test phase image, here's the app]
