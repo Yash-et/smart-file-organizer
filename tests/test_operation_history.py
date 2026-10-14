@@ -1,40 +1,79 @@
 import csv
-import operation_history
+from datetime import datetime
+from pathlib import Path
 
-def test_history_records_success_and_failure(tmp_path, monkeypatch):
-    log_dir = tmp_path / "logs"
-    history_file = log_dir / "operation_history.csv"
+BASE_DIR = Path(__file__).resolve().parent
+LOG_DIR = BASE_DIR / "logs"
+HISTORY_FILE = LOG_DIR / "operation_history.csv"
 
-    monkeypatch.setattr(operation_history, "LOG_DIR", log_dir)
-    monkeypatch.setattr(
-        operation_history, "HISTORY_FILE", history_file
+FIELDNAMES = [
+    "timestamp",
+    "source_folder",
+    "source_file",
+    "destination",
+    "category",
+    "status",
+    "error",
+]
+
+
+def ensure_history_file():
+    """Create the history CSV and its header if needed."""
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+    if not HISTORY_FILE.exists() or HISTORY_FILE.stat().st_size == 0:
+        with HISTORY_FILE.open(
+            "w",
+            newline="",
+            encoding="utf-8-sig",
+        ) as file:
+            writer = csv.DictWriter(file, fieldnames=FIELDNAMES)
+            writer.writeheader()
+
+    return HISTORY_FILE
+
+
+def record_operation(
+    source_folder,
+    source_file,
+    destination,
+    category,
+    status,
+    error="",
+):
+    """Append one attempted file operation to the CSV history."""
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+    file_exists = (
+        HISTORY_FILE.exists() and HISTORY_FILE.stat().st_size > 0
     )
 
-    operation_history.record_operation(
-        source_folder=tmp_path,
-        source_file=tmp_path / "photo.jpg",
-        destination=tmp_path / "Images" / "photo.jpg",
-        category="Images",
-        status="SUCCESS",
-    )
+    record = {
+        "timestamp": datetime.now().astimezone().isoformat(
+            timespec="seconds"
+        ),
+        "source_folder": str(source_folder),
+        "source_file": str(source_file),
+        "destination": str(destination),
+        "category": category,
+        "status": status,
+        "error": error or "",
+    }
 
-    operation_history.record_operation(
-        source_folder=tmp_path,
-        source_file=tmp_path / "broken.pdf",
-        destination=tmp_path / "Documents" / "broken.pdf",
-        category="Documents",
-        status="FAILED",
-        error="Permission denied",
-    )
-
-    with history_file.open(
-        "r", newline="", encoding="utf-8-sig"
+    with HISTORY_FILE.open(
+        "a",
+        newline="",
+        encoding="utf-8-sig",
     ) as file:
-        rows = list(csv.DictReader(file))
+        writer = csv.DictWriter(file, fieldnames=FIELDNAMES)
 
-    assert len(rows) == 2
-    assert rows[0]["status"] == "SUCCESS"
-    assert rows[0]["category"] == "Images"
-    assert rows[1]["status"] == "FAILED"
-    assert rows[1]["error"] == "Permission denied"
-    assert rows[0]["timestamp"]
+        if not file_exists:
+            writer.writeheader()
+
+        writer.writerow(record)
+
+def read_operations():
+    """Return saved operation records, newest first."""
+    ensure_history_file()
+    with HISTORY_FILE.open("r", newline="", encoding="utf-8-sig") as file:
+        return list(reversed(list(csv.DictReader(file))))

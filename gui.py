@@ -17,7 +17,7 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 APP_TITLE = "Smart File Organizer"
-APP_VERSION = "3.3"
+APP_VERSION = "3.4"
 WINDOW_SIZE = "1100x720"
 class SmartFileOrganizerApp(ctk.CTk):
     def __init__(self):
@@ -191,6 +191,14 @@ class SmartFileOrganizerApp(ctk.CTk):
             command=self._open_history_file,
         )
         self.history_button.pack(side="left", padx=(10, 0))
+
+        self.view_history_button = ctk.CTkButton(
+            action_frame,
+            text="View History",
+            width=110,
+            command=self._view_history,
+        )
+        self.view_history_button.pack(side="left", padx=(10, 0))
         
         progress_frame = ctk.CTkFrame(self.main, fg_color="transparent")
         progress_frame.grid(
@@ -304,6 +312,173 @@ class SmartFileOrganizerApp(ctk.CTk):
                 "Could not open history",
                 f"Unable to open the operation history:\n{error}",
             )
+    def _view_history(self):
+        """Open an in-app viewer for saved file operations."""
+        window = ctk.CTkToplevel(self)
+        window.title("Operation History")
+        window.geometry("1050x560")
+        window.minsize(780, 420)
+        window.transient(self)
+
+        window.grid_columnconfigure(0, weight=1)
+        window.grid_rowconfigure(2, weight=1)
+
+        ctk.CTkLabel(
+            window,
+            text="Operation History",
+            font=ctk.CTkFont(size=22, weight="bold"),
+        ).grid(row=0, column=0, sticky="w", padx=20, pady=(18, 10))
+
+        filter_frame = ctk.CTkFrame(window, fg_color="transparent")
+        filter_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 10))
+        filter_frame.grid_columnconfigure(0, weight=1)
+
+        search_var = tk.StringVar()
+        search_entry = ctk.CTkEntry(
+            filter_frame,
+            textvariable=search_var,
+            placeholder_text="Search filename, folder, destination, or category...",
+        )
+        search_entry.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+
+        status_var = tk.StringVar(value="All")
+        status_filter = ctk.CTkOptionMenu(
+            filter_frame,
+            variable=status_var,
+            values=["All", "SUCCESS", "FAILED"],
+            width=130,
+        )
+        status_filter.grid(row=0, column=1, padx=(0, 10))
+
+        refresh_button = ctk.CTkButton(
+            filter_frame,
+            text="Refresh",
+            width=90,
+            command=lambda: self._refresh_history_table(
+                tree, count_label, search_var.get(), status_var.get()
+            ),
+        )
+        refresh_button.grid(row=0, column=2, padx=(0, 10))
+
+        open_csv_button = ctk.CTkButton(
+            filter_frame,
+            text="Open CSV",
+            width=90,
+            command=self._open_history_file,
+        )
+        open_csv_button.grid(row=0, column=3)
+
+        table_frame = ctk.CTkFrame(window)
+        table_frame.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 10))
+        table_frame.grid_columnconfigure(0, weight=1)
+        table_frame.grid_rowconfigure(0, weight=1)
+
+        columns = ("timestamp", "filename", "category", "status", "destination", "error")
+        tree = ttk.Treeview(
+            table_frame,
+            columns=columns,
+            show="headings",
+            style="Preview.Treeview",
+        )
+        headings = {
+            "timestamp": ("Timestamp", 155),
+            "filename": ("File name", 160),
+            "category": ("Category", 100),
+            "status": ("Status", 85),
+            "destination": ("Destination", 250),
+            "error": ("Error", 180),
+        }
+        for column, (heading, width) in headings.items():
+            tree.heading(column, text=heading)
+            tree.column(column, width=width, minwidth=70, anchor="w")
+
+        scrollbar_y = ttk.Scrollbar(
+            table_frame, orient="vertical", command=tree.yview
+        )
+        scrollbar_x = ttk.Scrollbar(
+            table_frame, orient="horizontal", command=tree.xview
+        )
+        tree.configure(
+            yscrollcommand=scrollbar_y.set,
+            xscrollcommand=scrollbar_x.set,
+        )
+        tree.grid(row=0, column=0, sticky="nsew")
+        scrollbar_y.grid(row=0, column=1, sticky="ns")
+        scrollbar_x.grid(row=1, column=0, sticky="ew")
+
+        count_label = ctk.CTkLabel(window, text="Loading history...", anchor="w")
+        count_label.grid(row=3, column=0, sticky="ew", padx=20, pady=(0, 14))
+
+        search_var.trace_add(
+            "write",
+            lambda *_: self._refresh_history_table(
+                tree, count_label, search_var.get(), status_var.get()
+            ),
+        )
+        status_var.trace_add(
+            "write",
+            lambda *_: self._refresh_history_table(
+                tree, count_label, search_var.get(), status_var.get()
+            ),
+        )
+
+        self._refresh_history_table(tree, count_label, "", "All")
+        search_entry.focus_set()
+
+    def _refresh_history_table(self, tree, count_label, search_text="", status="All"):
+        """Reload and filter operation history in the viewer."""
+        try:
+            records = operation_history.read_operations()
+        except Exception as error:
+            messagebox.showerror(
+                "History could not be loaded",
+                f"Unable to read operation history:\n{error}",
+            )
+            return
+
+        query = search_text.strip().casefold()
+        for item in tree.get_children():
+            tree.delete(item)
+
+        shown = 0
+        for record in records:
+            record_status = record.get("status", "").upper()
+            if status != "All" and record_status != status:
+                continue
+
+            searchable_text = " ".join(
+                str(record.get(field, ""))
+                for field in (
+                    "timestamp",
+                    "source_folder",
+                    "source_file",
+                    "destination",
+                    "category",
+                    "status",
+                    "error",
+                )
+            ).casefold()
+            if query and query not in searchable_text:
+                continue
+
+            tree.insert(
+                "",
+                "end",
+                values=(
+                    record.get("timestamp", ""),
+                    Path(record.get("source_file", "")).name,
+                    record.get("category", ""),
+                    record.get("status", ""),
+                    record.get("destination", ""),
+                    record.get("error", ""),
+                ),
+            )
+            shown += 1
+
+        count_label.configure(
+            text=f"Showing {shown} of {len(records)} operation record(s)."
+        )
+
     '''FOLDER AND CONFIGURATION'''
 
     def _browse_folder(self):

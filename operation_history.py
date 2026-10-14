@@ -71,3 +71,9 @@ def record_operation(
             writer.writeheader()
 
         writer.writerow(record)
+
+def read_operations():
+    """Return saved operation records, newest first."""
+    ensure_history_file()
+    with HISTORY_FILE.open("r", newline="", encoding="utf-8-sig") as file:
+        return list(reversed(list(csv.DictReader(file))))
