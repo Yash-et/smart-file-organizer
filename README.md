@@ -316,6 +316,9 @@ Potential future improvements include:
 <img width="1920" height="1080" alt="Screenshot (6875)" src="https://github.com/user-attachments/assets/01c0fe4a-0099-401c-853e-e6ae02beb683" />
 <h3 align="center">Smart File Organizer v3.3 </h3>
 
+<img width="1920" height="1080" alt="Screenshot (6882)" src="https://github.com/user-attachments/assets/1dab1f67-ddba-4eee-8e36-2adfa1c16efb" />
+<h3 align="center">View History </h3>
+
 ## 📄 License
 
 This project is licensed under the MIT License.
