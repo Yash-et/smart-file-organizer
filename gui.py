@@ -1,5 +1,6 @@
 from email import message
 import os
+import csv
 import subprocess
 import sys
 import operation_history
@@ -17,7 +18,7 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 APP_TITLE = "Smart File Organizer"
-APP_VERSION = "3.5"
+APP_VERSION = "3.6"
 WINDOW_SIZE = "1100x720"
 class SmartFileOrganizerApp(ctk.CTk):
     def __init__(self):
@@ -424,6 +425,16 @@ class SmartFileOrganizerApp(ctk.CTk):
 
         self._refresh_history_table(tree, count_label, "", "All")
         search_entry.focus_set()
+        export_button = ctk.CTkButton(
+                    filter_frame,
+                    text="Export Filtered History",
+                    width=170,
+                    command=lambda: self._export_filtered_history(
+                        search_var.get(),
+                        status_var.get(),
+                    ),
+                )
+        export_button.grid(row=0, column=4, padx=(10, 0))
 
     def _refresh_history_table(self, tree, count_label, search_text="", status="All"):
         """Reload and filter operation history in the viewer."""
@@ -477,6 +488,99 @@ class SmartFileOrganizerApp(ctk.CTk):
 
         count_label.configure(
             text=f"Showing {shown} of {len(records)} operation record(s)."
+        )
+
+    '''EXPORT FILTERED HISTORY'''
+    
+    def _export_filtered_history(self, search_text="", status="All"):
+        """Export only the records matching the active history filters."""
+        try:
+            records = operation_history.read_operations()
+        except Exception as error:
+            messagebox.showerror(
+                "History could not be loaded",
+                f"Unable to read operation history:\n{error}",
+                parent=self,
+            )
+            return
+
+        query = search_text.strip().casefold()
+        filtered_records = []
+
+        searchable_fields = (
+            "timestamp",
+            "source_folder",
+            "source_file",
+            "destination",
+            "category",
+            "status",
+            "error",
+        )
+
+        for record in records:
+            record_status = record.get("status", "").upper()
+
+            if status != "All" and record_status != status:
+                continue
+
+            searchable_text = " ".join(
+                str(record.get(field, ""))
+                for field in searchable_fields
+            ).casefold()
+
+            if query and query not in searchable_text:
+                continue
+
+            filtered_records.append(record)
+
+        if not filtered_records:
+            messagebox.showinfo(
+                "Nothing to export",
+                "No history records match the current search and status filters.",
+                parent=self,
+            )
+            return
+
+        output_path = filedialog.asksaveasfilename(
+            parent=self,
+            title="Export Filtered History",
+            defaultextension=".csv",
+            initialfile="filtered_operation_history.csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+
+        if not output_path:
+            return
+
+        try:
+            fieldnames = operation_history.FIELDNAMES
+
+            with open(
+                output_path,
+                "w",
+                newline="",
+                encoding="utf-8-sig",
+            ) as file:
+                writer = csv.DictWriter(
+                    file,
+                    fieldnames=fieldnames,
+                    extrasaction="ignore",
+                )
+                writer.writeheader()
+                writer.writerows(filtered_records)
+
+        except (OSError, csv.Error) as error:
+            messagebox.showerror(
+                "Export failed",
+                f"Could not export the filtered history:\n{error}",
+                parent=self,
+            )
+            return
+
+        messagebox.showinfo(
+            "Export successful",
+            f"Exported {len(filtered_records)} record(s) to:\n{output_path}",
+            parent=self,
         )
 
     '''FOLDER AND CONFIGURATION'''
