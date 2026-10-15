@@ -17,7 +17,7 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 APP_TITLE = "Smart File Organizer"
-APP_VERSION = "3.4"
+APP_VERSION = "3.5"
 WINDOW_SIZE = "1100x720"
 class SmartFileOrganizerApp(ctk.CTk):
     def __init__(self):
