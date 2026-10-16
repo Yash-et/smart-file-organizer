@@ -18,8 +18,37 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 APP_TITLE = "Smart File Organizer"
-APP_VERSION = "3.6"
+APP_VERSION = "3.7"
 WINDOW_SIZE = "1100x720"
+
+def calculate_dashboard_statistics(records):
+    """Calculate dashboard values from operation-history records.
+
+    Success rate uses only records marked SUCCESS or FAILED. An empty history
+    returns None for the rate rather than misleadingly reporting 100 percent.
+    Category totals include successful file operations only.
+    """
+    records = list(records)
+    normalized = [
+        (record, str(record.get("status", "")).strip().upper())
+        for record in records
+    ]
+    successful = [record for record, status in normalized if status == "SUCCESS"]
+    failed = [record for record, status in normalized if status == "FAILED"]
+    attempts = len(successful) + len(failed)
+    category_counts = Counter(
+        str(record.get("category") or "Uncategorized").strip() or "Uncategorized"
+        for record in successful
+    )
+    return {
+        "recorded_operations": len(records),
+        "successful_files": len(successful),
+        "failed_operations": len(failed),
+        "success_rate": (len(successful) / attempts * 100) if attempts else None,
+        "category_counts": category_counts,
+        "recent_records": records[:8],
+    }
+
 class SmartFileOrganizerApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -41,6 +70,13 @@ class SmartFileOrganizerApp(ctk.CTk):
         self.is_organizing = False
         self.cancel_requested = threading.Event()
         self.worker_queue = queue.Queue()
+
+        # Dashboard window and widget references are created on demand.
+        self.dashboard_window = None
+        self.dashboard_stat_labels = {}
+        self.dashboard_category_frame = None
+        self.dashboard_activity_tree = None
+        self.dashboard_empty_label = None
 
         self._configure_layout()
         self._build_sidebar()
@@ -1076,15 +1112,275 @@ class SmartFileOrganizerApp(ctk.CTk):
         self._invalidate_preview()
         self.status_text.set("Preview cleared. No files were changed.")
 
+
+    # DASHBOARD
+
+    def _open_dashboard(self):
+        """Open the organization statistics dashboard, reusing it if open."""
+        if self.dashboard_window is not None:
+            try:
+                if self.dashboard_window.winfo_exists():
+                    self.dashboard_window.lift()
+                    self._refresh_dashboard()
+                    return
+            except tk.TclError:
+                self.dashboard_window = None
+
+        window = ctk.CTkToplevel(self)
+        self.dashboard_window = window
+        window.title(f"{APP_TITLE} — Statistics Dashboard")
+        window.geometry("1000x720")
+        window.minsize(820, 580)
+        window.transient(self)
+        window.protocol("WM_DELETE_WINDOW", self._close_dashboard)
+        window.grid_columnconfigure(0, weight=1)
+        window.grid_rowconfigure(2, weight=1)
+
+        header = ctk.CTkFrame(window, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=22, pady=(20, 12))
+        header.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            header,
+            text="Organization Dashboard",
+            font=ctk.CTkFont(size=25, weight="bold"),
+        ).grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(
+            header,
+            text="Statistics are calculated from your saved operation history.",
+            text_color="gray",
+        ).grid(row=1, column=0, sticky="w", pady=(3, 0))
+        ctk.CTkButton(
+            header,
+            text="Refresh",
+            width=100,
+            command=self._refresh_dashboard,
+        ).grid(row=0, column=1, rowspan=2, padx=(12, 0))
+
+        stats_frame = ctk.CTkFrame(window, fg_color="transparent")
+        stats_frame.grid(row=1, column=0, sticky="ew", padx=22, pady=(0, 14))
+        for column in range(4):
+            stats_frame.grid_columnconfigure(column, weight=1, uniform="stat")
+
+        stat_definitions = [
+            ("successful", "Files Organized"),
+            ("failed", "Failed Operations"),
+            ("operations", "Recorded Operations"),
+            ("rate", "Success Rate"),
+        ]
+        self.dashboard_stat_labels = {}
+        for column, (key, title) in enumerate(stat_definitions):
+            card = ctk.CTkFrame(stats_frame, corner_radius=12)
+            card.grid(row=0, column=column, sticky="ew", padx=5, pady=2)
+            ctk.CTkLabel(
+                card,
+                text=title,
+                text_color="gray",
+                font=ctk.CTkFont(size=12),
+            ).pack(anchor="w", padx=14, pady=(13, 4))
+            value_label = ctk.CTkLabel(
+                card,
+                text="—",
+                font=ctk.CTkFont(size=25, weight="bold"),
+            )
+            value_label.pack(anchor="w", padx=14, pady=(0, 13))
+            self.dashboard_stat_labels[key] = value_label
+
+        content = ctk.CTkFrame(window, fg_color="transparent")
+        content.grid(row=2, column=0, sticky="nsew", padx=22, pady=(0, 12))
+        content.grid_columnconfigure(0, weight=1, uniform="content")
+        content.grid_columnconfigure(1, weight=2, uniform="content")
+        content.grid_rowconfigure(0, weight=1)
+
+        category_panel = ctk.CTkFrame(content)
+        category_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 7))
+        category_panel.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(
+            category_panel,
+            text="Files by Category",
+            font=ctk.CTkFont(size=17, weight="bold"),
+        ).grid(row=0, column=0, sticky="w", padx=15, pady=(14, 8))
+        self.dashboard_category_frame = ctk.CTkScrollableFrame(
+            category_panel,
+            height=300,
+            fg_color="transparent",
+        )
+        self.dashboard_category_frame.grid(
+            row=1, column=0, sticky="nsew", padx=8, pady=(0, 10)
+        )
+        category_panel.grid_rowconfigure(1, weight=1)
+
+        activity_panel = ctk.CTkFrame(content)
+        activity_panel.grid(row=0, column=1, sticky="nsew", padx=(7, 0))
+        activity_panel.grid_columnconfigure(0, weight=1)
+        activity_panel.grid_rowconfigure(1, weight=1)
+        ctk.CTkLabel(
+            activity_panel,
+            text="Recent Activity",
+            font=ctk.CTkFont(size=17, weight="bold"),
+        ).grid(row=0, column=0, sticky="w", padx=15, pady=(14, 8))
+
+        tree_frame = ctk.CTkFrame(activity_panel, fg_color="transparent")
+        tree_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        tree_frame.grid_columnconfigure(0, weight=1)
+        tree_frame.grid_rowconfigure(0, weight=1)
+        columns = ("timestamp", "filename", "category", "status")
+        self.dashboard_activity_tree = ttk.Treeview(
+            tree_frame,
+            columns=columns,
+            show="headings",
+            style="Preview.Treeview",
+            height=10,
+        )
+        for column, heading, width in (
+            ("timestamp", "Timestamp", 145),
+            ("filename", "File", 170),
+            ("category", "Category", 100),
+            ("status", "Status", 80),
+        ):
+            self.dashboard_activity_tree.heading(column, text=heading)
+            self.dashboard_activity_tree.column(column, width=width, minwidth=65, anchor="w")
+        activity_scrollbar = ttk.Scrollbar(
+            tree_frame,
+            orient="vertical",
+            command=self.dashboard_activity_tree.yview,
+        )
+        self.dashboard_activity_tree.configure(yscrollcommand=activity_scrollbar.set)
+        self.dashboard_activity_tree.grid(row=0, column=0, sticky="nsew")
+        activity_scrollbar.grid(row=0, column=1, sticky="ns")
+
+        self.dashboard_empty_label = ctk.CTkLabel(
+            window,
+            text="",
+            text_color="gray",
+            anchor="w",
+        )
+        self.dashboard_empty_label.grid(
+            row=3, column=0, sticky="ew", padx=24, pady=(0, 14)
+        )
+        self._refresh_dashboard()
+
+    def _close_dashboard(self):
+        """Close the dashboard and clear its widget references."""
+        if self.dashboard_window is not None:
+            try:
+                self.dashboard_window.destroy()
+            except tk.TclError:
+                pass
+        self.dashboard_window = None
+        self.dashboard_stat_labels = {}
+        self.dashboard_category_frame = None
+        self.dashboard_activity_tree = None
+        self.dashboard_empty_label = None
+
+    def _refresh_dashboard(self):
+        """Refresh dashboard metrics from the persistent CSV history."""
+        if self.dashboard_window is None:
+            return
+        try:
+            if not self.dashboard_window.winfo_exists():
+                return
+            records = operation_history.read_operations()
+        except (OSError, csv.Error, tk.TclError) as error:
+            messagebox.showerror(
+                "Dashboard could not be refreshed",
+                f"Unable to read operation history:\n{error}",
+                parent=self.dashboard_window,
+            )
+            return
+        except Exception as error:
+            messagebox.showerror(
+                "Dashboard could not be refreshed",
+                f"Unable to load dashboard statistics:\n{error}",
+                parent=self.dashboard_window,
+            )
+            return
+
+        stats = calculate_dashboard_statistics(records)
+        self.dashboard_stat_labels["successful"].configure(
+            text=str(stats["successful_files"])
+        )
+        self.dashboard_stat_labels["failed"].configure(
+            text=str(stats["failed_operations"])
+        )
+        self.dashboard_stat_labels["operations"].configure(
+            text=str(stats["recorded_operations"])
+        )
+        rate = stats["success_rate"]
+        self.dashboard_stat_labels["rate"].configure(
+            text=f"{rate:.1f}%" if rate is not None else "N/A"
+        )
+
+        for child in self.dashboard_category_frame.winfo_children():
+            child.destroy()
+        category_counts = stats["category_counts"]
+        if category_counts:
+            max_count = max(category_counts.values())
+            for row, (category, count) in enumerate(
+                sorted(category_counts.items(), key=lambda item: (-item[1], item[0].casefold()))
+            ):
+                item_frame = ctk.CTkFrame(
+                    self.dashboard_category_frame,
+                    fg_color="transparent",
+                )
+                item_frame.grid(row=row, column=0, sticky="ew", padx=4, pady=5)
+                item_frame.grid_columnconfigure(0, weight=1)
+                ctk.CTkLabel(
+                    item_frame,
+                    text=category,
+                    anchor="w",
+                ).grid(row=0, column=0, sticky="ew")
+                ctk.CTkLabel(
+                    item_frame,
+                    text=str(count),
+                    font=ctk.CTkFont(weight="bold"),
+                ).grid(row=0, column=1, sticky="e", padx=(8, 0))
+                bar = ctk.CTkProgressBar(item_frame, height=8)
+                bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(5, 0))
+                bar.set(count / max_count if max_count else 0)
+        else:
+            ctk.CTkLabel(
+                self.dashboard_category_frame,
+                text="No successful file operations yet.",
+                text_color="gray",
+                wraplength=230,
+            ).grid(row=0, column=0, sticky="w", padx=5, pady=8)
+
+        tree = self.dashboard_activity_tree
+        for item in tree.get_children():
+            tree.delete(item)
+        for record in stats["recent_records"]:
+            timestamp = str(record.get("timestamp", "")).replace("T", " ")[:19]
+            tree.insert(
+                "",
+                "end",
+                values=(
+                    timestamp,
+                    Path(record.get("source_file", "")).name,
+                    record.get("category", ""),
+                    str(record.get("status", "")).upper(),
+                ),
+            )
+
+        if stats["recorded_operations"] == 0:
+            self.dashboard_empty_label.configure(
+                text="No operation history has been recorded yet. Success rate is N/A until an operation is recorded."
+            )
+        else:
+            self.dashboard_empty_label.configure(
+                text=(
+                    f"Showing {len(stats['recent_records'])} recent record(s). "
+                    "Category counts include successful operations only."
+                )
+            )
+
     def _show_section(self, section):
         if section == "Organize Files":
             self.status_text.set(
                 "Select a folder, preview it, then confirm to organize."
             )
         elif section == "Dashboard":
-            self.status_text.set(
-                "Preview files safely before organizing."
-            )
+            self._open_dashboard()
         elif section == "Settings":
             self.status_text.set(
                 "Settings currently use the project's config.json defaults."
