@@ -319,6 +319,9 @@ Potential future improvements include:
 <img width="1920" height="1080" alt="Screenshot (6882)" src="https://github.com/user-attachments/assets/1dab1f67-ddba-4eee-8e36-2adfa1c16efb" />
 <h3 align="center">View History </h3>
 
+<img width="1248" height="926" alt="Screenshot 2026-10-16 190514" src="https://github.com/user-attachments/assets/5b748626-e29f-4e56-891a-58dda21aeec1" />
+<h3 align="center">Organization Dashboard </h3>
+
 ## 📄 License
 
 This project is licensed under the MIT License.
