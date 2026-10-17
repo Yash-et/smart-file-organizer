@@ -187,6 +187,10 @@ python -m pytest -v
 <img width="1248" height="926" alt="Screenshot 2026-10-16 190514" src="https://github.com/user-attachments/assets/5b748626-e29f-4e56-891a-58dda21aeec1" />
 <h3 align="center">Organization Dashboard </h3>
 
+4. Settings Button - v3.7
+<img width="598" height="568" alt="Screenshot 2026-10-17 173643" src="https://github.com/user-attachments/assets/49c4d28d-7f62-471d-b369-974c334fd176" />
+<h3 align="center">Settings </h3>
+
 ## 📈 Version history
 
 - **v1.x:** Initial file organization utility and early safety improvements.
