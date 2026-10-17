@@ -13,6 +13,10 @@ from tkinter import filedialog, messagebox, ttk
 import customtkinter as ctk
 import organizer
 
+import copy
+import json
+from tkinter import messagebox
+
 '''APPLICATION CONFIGURATION'''
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -1375,16 +1379,154 @@ class SmartFileOrganizerApp(ctk.CTk):
             )
 
     def _show_section(self, section):
+        print(f"[DEBUG] Sidebar clicked: {section}")
+
         if section == "Organize Files":
             self.status_text.set(
                 "Select a folder, preview it, then confirm to organize."
             )
+
         elif section == "Dashboard":
+            print("[DEBUG] Opening dashboard")
             self._open_dashboard()
+
         elif section == "Settings":
-            self.status_text.set(
-                "Settings currently use the project's config.json defaults."
+            print("[DEBUG] Opening settings")
+            self._open_settings()
+        
+    def _open_settings(self):
+        """Open and save organization preferences."""
+
+        config = copy.deepcopy(self._load_config_safely())
+        settings = config.setdefault("settings", {})
+
+        window = ctk.CTkToplevel(self)
+        window.title("Smart File Organizer - Settings")
+        window.geometry("480x430")
+        window.resizable(False, False)
+        window.transient(self)
+
+        # Center the settings window over the main application.
+        window.update_idletasks()
+        x = self.winfo_rootx() + (self.winfo_width() - 480) // 2
+        y = self.winfo_rooty() + (self.winfo_height() - 430) // 2
+        window.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+
+        container = ctk.CTkFrame(window, fg_color="transparent")
+        container.pack(fill="both", expand=True, padx=24, pady=22)
+
+        ctk.CTkLabel(
+            container,
+            text="Settings",
+            font=ctk.CTkFont(size=24, weight="bold"),
+        ).pack(anchor="w")
+
+        ctk.CTkLabel(
+            container,
+            text="Configure how files are organized.",
+            text_color="gray",
+        ).pack(anchor="w", pady=(4, 20))
+
+        ctk.CTkLabel(
+            container,
+            text="FILE HANDLING",
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", pady=(0, 10))
+
+        hidden_var = ctk.BooleanVar(
+            value=settings.get("skip_hidden_files", True)
+        )
+        system_var = ctk.BooleanVar(
+            value=settings.get("skip_system_files", True)
+        )
+
+        ctk.CTkCheckBox(
+            container,
+            text="Skip hidden files",
+            variable=hidden_var,
+        ).pack(anchor="w", pady=7)
+
+        ctk.CTkCheckBox(
+            container,
+            text="Skip system files",
+            variable=system_var,
+        ).pack(anchor="w", pady=7)
+
+        ctk.CTkLabel(
+            container,
+            text="DESTINATION FOR OTHER FILE TYPES",
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", pady=(20, 8))
+
+        others_entry = ctk.CTkEntry(
+            container,
+            placeholder_text="Folder name (e.g. Others)",
+        )
+        others_entry.pack(fill="x")
+        others_entry.insert(
+            0,
+            settings.get("others_folder", "Others"),
+        )
+
+        buttons = ctk.CTkFrame(
+            container,
+            fg_color="transparent",
+        )
+        buttons.pack(side="bottom", fill="x", pady=(20, 0))
+
+        def save_settings():
+            # Update a copy of the existing configuration.
+            updated_config = copy.deepcopy(config)
+            updated_settings = updated_config.setdefault(
+                "settings", {}
             )
+
+            updated_settings["skip_hidden_files"] = hidden_var.get()
+            updated_settings["skip_system_files"] = system_var.get()
+            updated_settings["others_folder"] = others_entry.get().strip()
+
+            try:
+                organizer.validate_config(updated_config)
+
+                config_path = Path(organizer.CONFIG_FILE)
+                config_path.parent.mkdir(
+                    parents=True,
+                    exist_ok=True,
+                )
+
+                with open(config_path, "w", encoding="utf-8") as file:
+                    json.dump(updated_config, file, indent=4)
+                    file.write("\n")
+
+            except (ValueError, TypeError, OSError) as error:
+                messagebox.showerror(
+                    "Unable to save settings",
+                    str(error),
+                    parent=window,
+                )
+                return
+
+            messagebox.showinfo(
+                "Settings saved",
+                "Your organization settings have been saved.",
+                parent=window,
+            )
+            window.destroy()
+
+        ctk.CTkButton(
+            buttons,
+            text="Cancel",
+            fg_color="transparent",
+            border_width=1,
+            text_color=("gray10", "gray90"),
+            command=window.destroy,
+        ).pack(side="right", padx=(8, 0))
+
+        ctk.CTkButton(
+            buttons,
+            text="Save Settings",
+            command=save_settings,
+        ).pack(side="right")
 
 if __name__ == "__main__":
     app = SmartFileOrganizerApp()

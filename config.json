@@ -47,16 +47,16 @@
     },
     "settings": {
         "others_folder": "Others",
-        "skip_hidden_files": true,
+        "skip_hidden_files": false,
         "skip_system_files": true
     },
     "Code": [
-    ".py",
-    ".js",
-    ".jsx",
-    ".java",
-    ".cpp",
-    ".html",
-    ".css"
+        ".py",
+        ".js",
+        ".jsx",
+        ".java",
+        ".cpp",
+        ".html",
+        ".css"
     ]
 }
